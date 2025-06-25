@@ -17,7 +17,7 @@ default_args = {
 def download_and_extract_zip():
     url = "https://analyse.kmi.open.ac.uk/open-dataset/download"
     target_dir = "/opt/airflow/data/csvs"
-    if not os.path.isdir(target_dir):
+    if not os.path.exists(target_dir):
         client.makedirs(target_dir)
 
     print(f"Downloading ZIP from {url}")
