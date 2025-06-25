@@ -2,10 +2,10 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime, timedelta
 from hdfs import InsecureClient
-import requests, zipfile, os
+import requests
+import zipfile
 from io import BytesIO
-import traceback
-import os
+from pathlib import Path
 
 default_args = {
     "owner": "airflow",
@@ -16,9 +16,8 @@ default_args = {
 # Step 1: Download and extract the dataset
 def download_and_extract_zip():
     url = "https://analyse.kmi.open.ac.uk/open-dataset/download"
-    target_dir = "/opt/airflow/data/csvs"
-    if not os.path.exists(target_dir):
-        client.makedirs(target_dir)
+    target_dir = Path("/opt/airflow/data/csvs")
+    target_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"Downloading ZIP from {url}")
     response = requests.get(url, allow_redirects=True)
@@ -31,42 +30,24 @@ def download_and_extract_zip():
 
 # Step 2: Upload to HDFS
 def upload_to_hdfs():
+    from pathlib import Path
+    local_dir = Path("/opt/airflow/data/csvs")
+    hdfs_url = 'http://hadoop-hadoop-hdfs-nn.hadoop.svc.cluster.local:9870'
+    hdfs_target_dir = '/data/student_csvs'
 
-    print(">>> Starting upload_to_hdfs_py()")
+    print(f"Connecting to HDFS at {hdfs_url}")
+    client = InsecureClient(hdfs_url, user='hadoop')
+    print("Connected to HDFS")
 
-    try:
-        local_dir = '/opt/airflow/data/csvs'
-        print(f">>> Checking local_dir: {local_dir}")
+    client.makedirs(hdfs_target_dir)
+    print(f"HDFS directory ready: {hdfs_target_dir}")
 
-        if not os.path.exists(local_dir):
-            raise Exception(f"Local directory does not exist: {local_dir}")
+    for file_path in local_dir.glob("*.csv"):
+        hdfs_path = f"{hdfs_target_dir}/{file_path.name}"
+        print(f"Uploading {file_path} to {hdfs_path}")
+        client.upload(hdfs_path, str(file_path), overwrite=True)
 
-        files = os.listdir(local_dir)
-        print(f">>> Found {len(files)} files: {files}")
-
-        hdfs_url = 'http://hadoop-hadoop-hdfs-nn.hadoop.svc.cluster.local:9870'
-        hdfs_target_dir = '/data/student_csvs'
-
-        print(f">>> Connecting to HDFS at {hdfs_url}")
-        client = InsecureClient(hdfs_url, user='hadoop')
-        print(">>> Connected to HDFS")
-
-        client.makedirs(hdfs_target_dir, exist_ok=True)
-        print(f">>> HDFS directory ready: {hdfs_target_dir}")
-
-        for filename in files:
-            if filename.endswith('.csv'):
-                local_path = os.path.join(local_dir, filename)
-                hdfs_path = f'{hdfs_target_dir}/{filename}'
-                print(f">>> Uploading {local_path} to {hdfs_path}")
-                client.upload(hdfs_path, local_path, overwrite=True)
-
-        print(">>> Upload complete")
-
-    except Exception:
-        print(">>> Exception occurred in upload_to_hdfs_py:")
-        print(traceback.format_exc())
-        raise
+    print("Upload complete")
 
 # DAG definition
 with DAG(
@@ -84,7 +65,7 @@ with DAG(
 
     upload_to_hdfs = PythonOperator(
         task_id="upload_to_hdfs",
-        python_callable=upload_to_hdfs_py
+        python_callable=upload_to_hdfs
     )
 
     download_and_extract >> upload_to_hdfs
