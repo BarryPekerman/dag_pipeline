@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from hdfs import InsecureClient
 import requests, zipfile, pathlib
 from io import BytesIO
-import pandas as pd
+import os
 
 default_args = {
     "owner": "airflow",
