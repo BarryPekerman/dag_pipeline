@@ -54,7 +54,7 @@ def upload_to_hdfs_task():
         print(f">>> Uploading {file_path} to {hdfs_path}", flush=True)
         try:
             with open(file_path, 'r', encoding='utf-8') as local_file:
-                with client.write(hdfs_path, overwrite=True, encoding='utf-8', progress=True) as writer:
+                with client.write(hdfs_path, overwrite=True, encoding='utf-8') as writer:
                     for i, line in enumerate(local_file):
                         writer.write(line)
                         if i % 500 == 0:
