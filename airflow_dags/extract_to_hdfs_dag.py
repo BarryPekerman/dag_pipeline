@@ -13,18 +13,25 @@ with DAG(
     default_args=default_args,
     schedule=None,
     catchup=False,
-    description="Extracts CSVs from ZIP and loads to HDFS",
+    description="Downloads and extracts ZIP, uploads CSVs to HDFS",
 ) as dag:
 
-    extract_zip = BashOperator(
-        task_id="extract_zip",
-        bash_command="unzip -o /opt/airflow/data/student_data.zip -d /opt/airflow/data/csvs"
+    download_and_extract = BashOperator(
+        task_id="download_and_extract",
+        bash_command="""
+            mkdir -p /opt/airflow/data/csvs &&
+            wget -O /opt/airflow/data/student_data.zip https://analyse.kmi.open.ac.uk/open-dataset/download &&
+            unzip -o /opt/airflow/data/student_data.zip -d /opt/airflow/data/csvs
+        """
     )
 
     upload_to_hdfs = BashOperator(
         task_id="upload_to_hdfs",
-        bash_command="hdfs dfs -mkdir -p /data/student_csvs && hdfs dfs -put -f /opt/airflow/data/csvs/*.csv /data/student_csvs/"
+        bash_command="""
+            hdfs dfs -mkdir -p /data/student_csvs &&
+            hdfs dfs -put -f /opt/airflow/data/csvs/*.csv /data/student_csvs/
+        """
     )
 
-    extract_zip >> upload_to_hdfs
+    download_and_extract >> upload_to_hdfs
 
