@@ -16,7 +16,7 @@ def download_and_extract_zip():
     url = "https://analyse.kmi.open.ac.uk/open-dataset/download"
     target_dir = "/opt/airflow/data/csvs"
 
-    print(f"Downloading ZIP from {url}")
+    print(f"Downloading ZIP from {url}", flush=True)
     response = requests.get(url, allow_redirects=True)
     if response.status_code != 200:
         raise Exception(f"Failed to download file: {response.status_code}")
@@ -25,36 +25,46 @@ def download_and_extract_zip():
 
     with zipfile.ZipFile(BytesIO(response.content)) as zip_file:
         zip_file.extractall(target_dir)
-        print(f"Extracted files to: {target_dir}")
+        print(f"Extracted files to: {target_dir}", flush=True)
 
-# Step 2: Upload to HDFS
+# Step 2: Upload to HDFS using buffered write
 def upload_to_hdfs_task():
-    print(">>> Starting upload_to_hdfs_task()")
+    print(">>> Starting upload_to_hdfs_task()", flush=True)
 
     local_dir = '/opt/airflow/data/csvs'
     files = list(pathlib.Path(local_dir).glob("*.csv"))
-    print(f">>> Found {len(files)} files: {[str(f) for f in files]}")
+    print(f">>> Found {len(files)} files: {[str(f) for f in files]}", flush=True)
 
     hdfs_url = 'http://hadoop-hadoop-hdfs-nn.hadoop.svc.cluster.local:9870'
     hdfs_target_dir = '/data/student_csvs'
 
-    print(f">>> Connecting to HDFS at {hdfs_url}")
-    client = InsecureClient(hdfs_url, user='hadoop')
-    print(">>> Connected to HDFS")
+    print(f">>> Connecting to HDFS at {hdfs_url}", flush=True)
+    client = InsecureClient(hdfs_url, user='root')
+   # client = InsecureClient(hdfs_url, user='hadoop', timeout=10)
+    print(">>> Connected to HDFS", flush=True)
 
-    # Avoid using unsupported args — exist_ok is not valid
     if not client.status(hdfs_target_dir, strict=False):
         client.makedirs(hdfs_target_dir)
-        print(f">>> Created HDFS directory: {hdfs_target_dir}")
+        print(f">>> Created HDFS directory: {hdfs_target_dir}", flush=True)
     else:
-        print(f">>> HDFS directory already exists: {hdfs_target_dir}")
+        print(f">>> HDFS directory already exists: {hdfs_target_dir}", flush=True)
 
     for file_path in files:
         hdfs_path = f'{hdfs_target_dir}/{file_path.name}'
-        print(f">>> Uploading {file_path} to {hdfs_path}")
-        client.upload(hdfs_path, str(file_path), overwrite=True)
+        print(f">>> Uploading {file_path} to {hdfs_path}", flush=True)
+        try:
+            with open(file_path, 'r', encoding='utf-8') as local_file:
+                with client.write(hdfs_path, overwrite=True, encoding='utf-8', progress=True) as writer:
+                    for i, line in enumerate(local_file):
+                        writer.write(line)
+                        if i % 500 == 0:
+                            print(f"  ...wrote {i} lines to {hdfs_path}", flush=True)
+            print(f">>> Finished uploading {file_path}", flush=True)
+        except Exception as e:
+            print(f"!!! Failed to upload {file_path}: {e}", flush=True)
+            raise
 
-    print(">>> Upload complete")
+    print(">>> Upload complete", flush=True)
 
 # DAG definition
 with DAG(
