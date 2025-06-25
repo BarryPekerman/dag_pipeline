@@ -37,7 +37,7 @@ def upload_to_hdfs_task():
     print(f">>> Found {len(files)} files: {[str(f) for f in files]}", flush=True)
 
     hdfs_url = 'http://hadoop-hadoop-hdfs-nn.hadoop.svc.cluster.local:9870'
-    hdfs_target_dir = '/data/student_csvs'
+    hdfs_target_dir = '/datasets'
 
     print(f">>> Connecting to HDFS at {hdfs_url}", flush=True)
     client = InsecureClient(hdfs_url, user='airflow')
