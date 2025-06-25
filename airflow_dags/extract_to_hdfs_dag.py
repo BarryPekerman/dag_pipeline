@@ -2,10 +2,8 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime, timedelta
 from hdfs import InsecureClient
-import requests, zipfile
+import requests, zipfile, pathlib
 from io import BytesIO
-import pathlib
-
 
 default_args = {
     "owner": "airflow",
@@ -15,8 +13,6 @@ default_args = {
 
 # Step 1: Download and extract the dataset
 def download_and_extract_zip():
-    import pathlib
-
     url = "https://analyse.kmi.open.ac.uk/open-dataset/download"
     target_dir = "/opt/airflow/data/csvs"
 
@@ -46,8 +42,12 @@ def upload_to_hdfs_task():
     client = InsecureClient(hdfs_url, user='hadoop')
     print(">>> Connected to HDFS")
 
-    client.makedirs(hdfs_target_dir)
-    print(f">>> HDFS directory ready: {hdfs_target_dir}")
+    # Avoid using unsupported args — exist_ok is not valid
+    if not client.status(hdfs_target_dir, strict=False):
+        client.makedirs(hdfs_target_dir)
+        print(f">>> Created HDFS directory: {hdfs_target_dir}")
+    else:
+        print(f">>> HDFS directory already exists: {hdfs_target_dir}")
 
     for file_path in files:
         hdfs_path = f'{hdfs_target_dir}/{file_path.name}'
@@ -60,7 +60,7 @@ def upload_to_hdfs_task():
 with DAG(
     dag_id="extract_to_hdfs_dag",
     default_args=default_args,
-    schedule=None,
+    schedule_interval=None,
     catchup=False,
     description="Download ZIP, extract CSVs, upload to HDFS (Python only)",
 ) as dag:
