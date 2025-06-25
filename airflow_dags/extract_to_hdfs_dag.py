@@ -15,7 +15,7 @@ default_args = {
 def download_and_extract_zip():
     url = "https://analyse.kmi.open.ac.uk/open-dataset/download"
     target_dir = "/opt/airflow/data/csvs"
-    os.makedirs(target_dir, exist_ok=True)
+    client.makedirs(hdfs_target_dir)
 
     print(f"Downloading ZIP from {url}")
     response = requests.get(url, allow_redirects=True)
