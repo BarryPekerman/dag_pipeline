@@ -2,10 +2,8 @@ from airflow import DAG
 from airflow.operators.python import PythonOperator
 from datetime import datetime, timedelta
 from hdfs import InsecureClient
-import requests
-import zipfile
+import requests, zipfile
 from io import BytesIO
-from pathlib import Path
 
 default_args = {
     "owner": "airflow",
@@ -15,40 +13,46 @@ default_args = {
 
 # Step 1: Download and extract the dataset
 def download_and_extract_zip():
+    import pathlib
+
     url = "https://analyse.kmi.open.ac.uk/open-dataset/download"
     target_dir = "/opt/airflow/data/csvs"
-    if not os.path.exists(target_dir):
-        client.makedirs(target_dir)
 
     print(f"Downloading ZIP from {url}")
     response = requests.get(url, allow_redirects=True)
     if response.status_code != 200:
         raise Exception(f"Failed to download file: {response.status_code}")
 
+    pathlib.Path(target_dir).mkdir(parents=True, exist_ok=True)
+
     with zipfile.ZipFile(BytesIO(response.content)) as zip_file:
         zip_file.extractall(target_dir)
         print(f"Extracted files to: {target_dir}")
 
 # Step 2: Upload to HDFS
-def upload_to_hdfs():
-    from pathlib import Path
-    local_dir = Path("/opt/airflow/data/csvs")
+def upload_to_hdfs_task():
+    print(">>> Starting upload_to_hdfs_task()")
+
+    local_dir = '/opt/airflow/data/csvs'
+    files = list(pathlib.Path(local_dir).glob("*.csv"))
+    print(f">>> Found {len(files)} files: {[str(f) for f in files]}")
+
     hdfs_url = 'http://hadoop-hadoop-hdfs-nn.hadoop.svc.cluster.local:9870'
     hdfs_target_dir = '/data/student_csvs'
 
-    print(f"Connecting to HDFS at {hdfs_url}")
+    print(f">>> Connecting to HDFS at {hdfs_url}")
     client = InsecureClient(hdfs_url, user='hadoop')
-    print("Connected to HDFS")
+    print(">>> Connected to HDFS")
 
     client.makedirs(hdfs_target_dir)
-    print(f"HDFS directory ready: {hdfs_target_dir}")
+    print(f">>> HDFS directory ready: {hdfs_target_dir}")
 
-    for file_path in local_dir.glob("*.csv"):
-        hdfs_path = f"{hdfs_target_dir}/{file_path.name}"
-        print(f"Uploading {file_path} to {hdfs_path}")
+    for file_path in files:
+        hdfs_path = f'{hdfs_target_dir}/{file_path.name}'
+        print(f">>> Uploading {file_path} to {hdfs_path}")
         client.upload(hdfs_path, str(file_path), overwrite=True)
 
-    print("Upload complete")
+    print(">>> Upload complete")
 
 # DAG definition
 with DAG(
@@ -66,7 +70,7 @@ with DAG(
 
     upload_to_hdfs = PythonOperator(
         task_id="upload_to_hdfs",
-        python_callable=upload_to_hdfs
+        python_callable=upload_to_hdfs_task
     )
 
     download_and_extract >> upload_to_hdfs
