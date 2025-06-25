@@ -11,7 +11,7 @@ default_args = {
 with DAG(
     dag_id="extract_to_hdfs_dag",
     default_args=default_args,
-    schedule_interval=None,
+    schedule=None,
     catchup=False,
     description="Extracts CSVs from ZIP and loads to HDFS",
 ) as dag:
