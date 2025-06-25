@@ -60,7 +60,7 @@ def upload_to_hdfs_task():
 with DAG(
     dag_id="extract_to_hdfs_dag",
     default_args=default_args,
-    schedule_interval=None,
+    schedule=None,
     catchup=False,
     description="Download ZIP, extract CSVs, upload to HDFS (Python only)",
 ) as dag:
