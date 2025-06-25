@@ -1,3 +1,0 @@
-hdfs
-pyarrow
-pyspark
