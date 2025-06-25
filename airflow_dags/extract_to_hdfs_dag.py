@@ -40,7 +40,7 @@ def upload_to_hdfs_task():
     hdfs_target_dir = '/data/student_csvs'
 
     print(f">>> Connecting to HDFS at {hdfs_url}", flush=True)
-    client = InsecureClient(hdfs_url, user='root')
+    client = InsecureClient(hdfs_url, user='airflow')
     print(">>> Connected to HDFS", flush=True)
 
     if not client.status(hdfs_target_dir, strict=False):
