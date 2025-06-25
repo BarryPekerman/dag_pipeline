@@ -16,8 +16,9 @@ default_args = {
 # Step 1: Download and extract the dataset
 def download_and_extract_zip():
     url = "https://analyse.kmi.open.ac.uk/open-dataset/download"
-    target_dir = Path("/opt/airflow/data/csvs")
-    target_dir.mkdir(parents=True, exist_ok=True)
+    target_dir = "/opt/airflow/data/csvs"
+    if not os.path.exists(target_dir):
+        client.makedirs(target_dir)
 
     print(f"Downloading ZIP from {url}")
     response = requests.get(url, allow_redirects=True)
