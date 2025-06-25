@@ -30,7 +30,7 @@ def download_and_extract_zip():
         print(f"Extracted files to: {target_dir}")
 
 # Step 2: Upload to HDFS
-def upload_to_hdfs_py():
+def upload_to_hdfs():
 
     print(">>> Starting upload_to_hdfs_py()")
 
