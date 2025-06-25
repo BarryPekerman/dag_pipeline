@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 from hdfs import InsecureClient
 import requests, zipfile
 from io import BytesIO
+import pathlib
+
 
 default_args = {
     "owner": "airflow",
