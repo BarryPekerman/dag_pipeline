@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 from hdfs import InsecureClient
 import requests, zipfile, os
 from io import BytesIO
+import traceback
+import os
 
 default_args = {
     "owner": "airflow",
@@ -15,7 +17,8 @@ default_args = {
 def download_and_extract_zip():
     url = "https://analyse.kmi.open.ac.uk/open-dataset/download"
     target_dir = "/opt/airflow/data/csvs"
-    client.makedirs(hdfs_target_dir)
+    if not os.path.isdir(hdfs_target_dir):
+        client.makedirs(hdfs_target_dir)
 
     print(f"Downloading ZIP from {url}")
     response = requests.get(url, allow_redirects=True)
@@ -28,9 +31,6 @@ def download_and_extract_zip():
 
 # Step 2: Upload to HDFS
 def upload_to_hdfs_py():
-    import traceback
-    import os
-    from hdfs import InsecureClient
 
     print(">>> Starting upload_to_hdfs_py()")
 
