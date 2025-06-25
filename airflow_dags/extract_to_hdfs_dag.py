@@ -58,7 +58,7 @@ def upload_to_hdfs_task():
 
 # DAG definition
 with DAG(
-    dag_id="extract_to_hdfs_dag",
+    "my_pipeline",
     default_args=default_args,
     schedule=None,
     catchup=False,
