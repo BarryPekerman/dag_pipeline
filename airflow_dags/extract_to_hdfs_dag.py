@@ -1,9 +1,9 @@
 from airflow import DAG
-from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
 from datetime import datetime, timedelta
 from hdfs import InsecureClient
-import os
+import requests, zipfile, os
+from io import BytesIO
 
 default_args = {
     "owner": "airflow",
@@ -11,14 +11,28 @@ default_args = {
     "retries": 1,
 }
 
-# Python function to upload extracted CSVs to HDFS
+# Step 1: Download and extract the dataset
+def download_and_extract_zip():
+    url = "https://analyse.kmi.open.ac.uk/open-dataset/download"
+    target_dir = "/opt/airflow/data/csvs"
+    os.makedirs(target_dir, exist_ok=True)
+
+    print(f"Downloading ZIP from {url}")
+    response = requests.get(url, allow_redirects=True)
+    if response.status_code != 200:
+        raise Exception(f"Failed to download file: {response.status_code}")
+
+    with zipfile.ZipFile(BytesIO(response.content)) as zip_file:
+        zip_file.extractall(target_dir)
+        print(f"Extracted files to: {target_dir}")
+
+# Step 2: Upload to HDFS
 def upload_to_hdfs_py():
     local_dir = '/opt/airflow/data/csvs'
     hdfs_url = 'http://hadoop-hadoop-hdfs-nn.hadoop.svc.cluster.local:9870'
     hdfs_target_dir = '/data/student_csvs'
 
     client = InsecureClient(hdfs_url, user='hadoop')
-
     client.makedirs(hdfs_target_dir, exist_ok=True)
 
     for filename in os.listdir(local_dir):
@@ -34,20 +48,14 @@ with DAG(
     default_args=default_args,
     schedule=None,
     catchup=False,
-    description="Downloads, extracts ZIP, uploads CSVs to HDFS",
+    description="Download ZIP, extract CSVs, upload to HDFS (Python only)",
 ) as dag:
 
-    # Bash task to download and extract ZIP
-    download_and_extract = BashOperator(
+    download_and_extract = PythonOperator(
         task_id="download_and_extract",
-        bash_command="""
-            mkdir -p /opt/airflow/data/csvs &&
-            wget -O /opt/airflow/data/student_data.zip https://analyse.kmi.open.ac.uk/open-dataset/download &&
-            unzip -o /opt/airflow/data/student_data.zip -d /opt/airflow/data/csvs
-        """
+        python_callable=download_and_extract_zip
     )
 
-    # Python task to upload CSVs to HDFS
     upload_to_hdfs = PythonOperator(
         task_id="upload_to_hdfs",
         python_callable=upload_to_hdfs_py
