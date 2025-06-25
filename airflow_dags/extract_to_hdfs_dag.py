@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from hdfs import InsecureClient
 import requests, zipfile, pathlib
 from io import BytesIO
+import pandas as pd
 
 default_args = {
     "owner": "airflow",
@@ -27,7 +28,7 @@ def download_and_extract_zip():
         zip_file.extractall(target_dir)
         print(f"Extracted files to: {target_dir}", flush=True)
 
-# Step 2: Upload to HDFS using buffered write
+# Step 2: Upload to HDFS using pandas and verbose logging
 def upload_to_hdfs_task():
     print(">>> Starting upload_to_hdfs_task()", flush=True)
 
@@ -40,7 +41,6 @@ def upload_to_hdfs_task():
 
     print(f">>> Connecting to HDFS at {hdfs_url}", flush=True)
     client = InsecureClient(hdfs_url, user='root')
-   # client = InsecureClient(hdfs_url, user='hadoop', timeout=10)
     print(">>> Connected to HDFS", flush=True)
 
     if not client.status(hdfs_target_dir, strict=False):
@@ -52,14 +52,24 @@ def upload_to_hdfs_task():
     for file_path in files:
         hdfs_path = f'{hdfs_target_dir}/{file_path.name}'
         print(f">>> Uploading {file_path} to {hdfs_path}", flush=True)
+
         try:
-            with open(file_path, 'r', encoding='utf-8') as local_file:
-                with client.write(hdfs_path, overwrite=True, encoding='utf-8') as writer:
-                    for i, line in enumerate(local_file):
-                        writer.write(line)
-                        if i % 500 == 0:
-                            print(f"  ...wrote {i} lines to {hdfs_path}", flush=True)
-            print(f">>> Finished uploading {file_path}", flush=True)
+            df = pd.read_csv(file_path)
+            print(f"  - Loaded DataFrame with shape: {df.shape}", flush=True)
+            print(f"  - First 3 rows:\n{df.head(3)}", flush=True)
+
+            csv_data = df.to_csv(index=False, lineterminator="\n")
+            with client.write(hdfs_path, overwrite=True, encoding='utf-8') as writer:
+                for i, line in enumerate(csv_data.splitlines()):
+                    writer.write(line + "\n")
+                    if i % 500 == 0:
+                        print(f"    ...wrote {i} lines to {hdfs_path}", flush=True)
+
+            print(f">>> Finished uploading {file_path} ({i+1} lines)", flush=True)
+
+        except UnicodeDecodeError as ude:
+            print(f"!!! Unicode decode error in {file_path}: {ude}", flush=True)
+            raise
         except Exception as e:
             print(f"!!! Failed to upload {file_path}: {e}", flush=True)
             raise
