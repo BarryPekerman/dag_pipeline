@@ -12,6 +12,10 @@ default_args = {
     "retries": 1,
 }
 
+HDFS_URL = "http://hadoop-hadoop-hdfs-nn.hadoop.svc.cluster.local:9870"
+HDFS_USER = "airflow"
+EXTRACT_DIR= "/opt/airflow/data/csvs"
+
 # Step 1: Download and extract the dataset
 def download_and_extract_zip():
     url = "https://analyse.kmi.open.ac.uk/open-dataset/download"
@@ -29,52 +33,23 @@ def download_and_extract_zip():
         print(f"Extracted files to: {target_dir}", flush=True)
 
 # Step 2: Upload to HDFS using pandas and verbose logging
+
 def upload_to_hdfs_task():
-    print(">>> Starting upload_to_hdfs_task()", flush=True)
+    client = InsecureClient(HDFS_URL, user=HDFS_USER)
 
-    local_dir = '/opt/airflow/data/csvs'
-    files = list(pathlib.Path(local_dir).glob("*.csv"))
-    print(f">>> Found {len(files)} files: {[str(f) for f in files]}", flush=True)
+    for root, _, files in os.walk(EXTRACT_DIR):
+        for file in files:
+            local_path = os.path.join(root, file)
+            rel_path = os.path.relpath(local_path, EXTRACT_DIR)
+            hdfs_path = f"/datasets/{rel_path}"
 
-    hdfs_url = 'http://hadoop-hadoop-hdfs-nn.hadoop.svc.cluster.local:9870'
-    hdfs_target_dir = '/datasets'
+            try:
+                with open(local_path, "rb") as reader:
+                    client.write(hdfs_path, reader, overwrite=True)
+                print(f"Uploaded {file} successfully.")
+            except Exception as e:
+                print(f"Upload failed for {file}: {e}")
 
-    print(f">>> Connecting to HDFS at {hdfs_url}", flush=True)
-    client = InsecureClient(hdfs_url, user='airflow')
-    print(">>> Connected to HDFS", flush=True)
-
-    if not client.status(hdfs_target_dir, strict=False):
-        client.makedirs(hdfs_target_dir)
-        print(f">>> Created HDFS directory: {hdfs_target_dir}", flush=True)
-    else:
-        print(f">>> HDFS directory already exists: {hdfs_target_dir}", flush=True)
-
-    for file_path in files:
-        hdfs_path = f'{hdfs_target_dir}/{file_path.name}'
-        print(f">>> Uploading {file_path} to {hdfs_path}", flush=True)
-
-        try:
-            df = pd.read_csv(file_path)
-            print(f"  - Loaded DataFrame with shape: {df.shape}", flush=True)
-            print(f"  - First 3 rows:\n{df.head(3)}", flush=True)
-
-            csv_data = df.to_csv(index=False, lineterminator="\n")
-            with client.write(hdfs_path, overwrite=True, encoding='utf-8') as writer:
-                for i, line in enumerate(csv_data.splitlines()):
-                    writer.write(line + "\n")
-                    if i % 500 == 0:
-                        print(f"    ...wrote {i} lines to {hdfs_path}", flush=True)
-
-            print(f">>> Finished uploading {file_path} ({i+1} lines)", flush=True)
-
-        except UnicodeDecodeError as ude:
-            print(f"!!! Unicode decode error in {file_path}: {ude}", flush=True)
-            raise
-        except Exception as e:
-            print(f"!!! Failed to upload {file_path}: {e}", flush=True)
-            raise
-
-    print(">>> Upload complete", flush=True)
 
 # DAG definition
 with DAG(
