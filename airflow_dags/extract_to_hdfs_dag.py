@@ -1,10 +1,10 @@
 from airflow import DAG
 from airflow.operators.bash import BashOperator
-from airflow.utils.dates import days_ago
+from datetime import datetime, timedelta
 
 default_args = {
     "owner": "airflow",
-    "start_date": days_ago(1),
+    "start_date": datetime.now() - timedelta(days=1),
     "retries": 1,
 }
 
