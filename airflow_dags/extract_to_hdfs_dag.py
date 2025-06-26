@@ -59,7 +59,7 @@ def aggregate_by_module():
     spark = SparkSession.builder \
         .appName("AggregateByModule") \
         .master("local[*]") \
-        .config("spark.jars.packages", "org.postgresql:postgresql:42.7.3") \
+        .config("spark.jars.packages", "mysql:mysql-connector-java:8.0.33") \
         .getOrCreate()
 
     joined, assessments = get_common_dataframes(spark)
@@ -79,8 +79,8 @@ def aggregate_by_module():
     avg_scores = clean.groupBy("module").agg(F.avg("score").alias("avg_score"))
     avg_scores.show()
 
-    jdbc_url = "jdbc:postgresql://postgres-postgresql.postgres.svc.cluster.local:5432/airflow_db"
-    jdbc_props = {"user": "airflow", "password": "airflowpass", "driver": "org.postgresql.Driver"}
+    jdbc_url = "jdbc:mysql://mysql.mysql.svc.cluster.local:3306/airflow_db"
+    jdbc_props = {"user": "airflow", "password": "airflowpassword", "driver": "com.mysql.cj.jdbc.Driver"}
 
     avg_scores.write.jdbc(url=jdbc_url, table="avg_scores_by_module", mode="overwrite", properties=jdbc_props)
     spark.stop()
@@ -89,7 +89,7 @@ def aggregate_by_student():
     spark = SparkSession.builder \
         .appName("AggregateByStudent") \
         .master("local[*]") \
-        .config("spark.jars.packages", "org.postgresql:postgresql:42.7.3") \
+        .config("spark.jars.packages", "mysql:mysql-connector-java:8.0.33") \
         .getOrCreate()
 
     joined, _ = get_common_dataframes(spark)
@@ -101,8 +101,8 @@ def aggregate_by_student():
     avg_scores = clean.groupBy("id_student").agg(F.avg("score").alias("avg_score"))
     avg_scores.show()
 
-    jdbc_url = "jdbc:postgresql://postgres-postgresql.postgres.svc.cluster.local:5432/airflow_db"
-    jdbc_props = {"user": "airflow", "password": "airflowpass", "driver": "org.postgresql.Driver"}
+    jdbc_url = "jdbc:mysql://mysql.mysql.svc.cluster.local:3306/airflow_db"
+    jdbc_props = {"user": "airflow", "password": "airflowpassword", "driver": "com.mysql.cj.jdbc.Driver"}
 
     avg_scores.write.jdbc(url=jdbc_url, table="avg_scores_by_student", mode="overwrite", properties=jdbc_props)
     spark.stop()
@@ -112,7 +112,7 @@ with DAG(
     default_args=default_args,
     schedule=None,
     catchup=False,
-    description="Download ZIP, extract CSVs, upload to HDFS, then run parallel PySpark aggregations to PostgreSQL",
+    description="Download ZIP, extract CSVs, upload to HDFS, then run parallel PySpark aggregations to MySQL",
 ) as dag:
 
     download_and_extract = PythonOperator(
