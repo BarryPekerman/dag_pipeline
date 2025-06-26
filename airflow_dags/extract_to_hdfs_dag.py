@@ -52,6 +52,7 @@ def upload_to_hdfs_task():
             except Exception as e:
                 print(f"Upload failed for {file}: {e}")
 
+
 # Step 3: Run PySpark aggregation and write to PostgreSQL
 def aggregate_with_pyspark():
     spark = SparkSession.builder \
@@ -72,19 +73,24 @@ def aggregate_with_pyspark():
 
     print("Joining and cleaning data...", flush=True)
 
-    # Join studentAssessment with assessments to get code_module
-    joined = student_assessments.join(assessments, on="id_assessment", how="inner") \
-                                .join(student_info, on="id_student", how="inner")
+    joined = student_assessments \
+        .join(assessments, on="id_assessment", how="inner") \
+        .join(student_info, on="id_student", how="inner")
 
-    # Filter: score is not null, is_banked = 0, student did not withdraw
-    clean = joined.filter(
+    clean = joined.select(
+        "id_assessment",
+        "id_student",
+        assessments["code_module"].alias("module"),
+        "score",
+        "is_banked",
+        "final_result"
+    ).filter(
         (F.col("score").isNotNull()) &
         (F.col("is_banked") == 0) &
         (F.col("final_result") != "Withdrawn")
     )
 
-    # Aggregate average score per module
-    avg_scores = clean.groupBy("code_module").agg(F.avg("score").alias("avg_score"))
+    avg_scores = clean.groupBy("module").agg(F.avg("score").alias("avg_score"))
 
     print("Result preview:")
     avg_scores.show()
