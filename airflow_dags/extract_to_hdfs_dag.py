@@ -59,7 +59,7 @@ def aggregate_by_module():
     spark = SparkSession.builder \
         .appName("AggregateByModule") \
         .master("local[*]") \
-        .config("spark.jars.packages", "mysql:mysql-connector-java:8.0.33") \
+        .config("spark.jars", "/opt/mysql-connector-java.jar") \
         .getOrCreate()
 
     joined, assessments = get_common_dataframes(spark)
@@ -89,7 +89,7 @@ def aggregate_by_student():
     spark = SparkSession.builder \
         .appName("AggregateByStudent") \
         .master("local[*]") \
-        .config("spark.jars.packages", "mysql:mysql-connector-java:8.0.33") \
+        .config("spark.jars", "/opt/mysql-connector-java.jar") \
         .getOrCreate()
 
     joined, _ = get_common_dataframes(spark)
