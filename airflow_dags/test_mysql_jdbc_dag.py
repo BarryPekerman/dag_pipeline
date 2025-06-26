@@ -14,6 +14,8 @@ def test_mysql_jdbc():
         .appName("MySQLJDBCTest") \
         .master("local[*]") \
         .config("spark.jars", "/opt/mysql-connector-java.jar") \
+        .config("spark.executor.extraClassPath", "/opt/mysql-connector-java.jar") \
+        .config("spark.driver.extraClassPath", "/opt/mysql-connector-java.jar") \
         .getOrCreate()
 
     jdbc_url = "jdbc:mysql://mysql.mysql.svc.cluster.local:3306/airflow_db?serverTimezone=UTC"
