@@ -2,6 +2,7 @@ from airflow import DAG
 from airflow.providers.standard.operators.python import PythonOperator
 from datetime import datetime, timedelta
 from hdfs import InsecureClient
+from pyspark.sql import SparkSession
 import requests, zipfile, pathlib
 from io import BytesIO
 import os
@@ -13,13 +14,14 @@ default_args = {
 }
 
 HDFS_URL = "http://hadoop-hadoop-hdfs-nn.hadoop.svc.cluster.local:9870"
+HDFS_NAMENODE = "hdfs://hadoop-hadoop-hdfs-nn.hadoop.svc.cluster.local:9000"
 HDFS_USER = "airflow"
-EXTRACT_DIR= "/opt/airflow/data/csvs"
+EXTRACT_DIR = "/opt/airflow/data/csvs"
 
 # Step 1: Download and extract the dataset
 def download_and_extract_zip():
     url = "https://analyse.kmi.open.ac.uk/open-dataset/download"
-    target_dir = "/opt/airflow/data/csvs"
+    target_dir = EXTRACT_DIR
 
     print(f"Downloading ZIP from {url}", flush=True)
     response = requests.get(url, allow_redirects=True)
@@ -32,8 +34,7 @@ def download_and_extract_zip():
         zip_file.extractall(target_dir)
         print(f"Extracted files to: {target_dir}", flush=True)
 
-# Step 2: Upload to HDFS using pandas and verbose logging
-
+# Step 2: Upload to HDFS
 def upload_to_hdfs_task():
     client = InsecureClient(HDFS_URL, user=HDFS_USER)
 
@@ -50,6 +51,29 @@ def upload_to_hdfs_task():
             except Exception as e:
                 print(f"Upload failed for {file}: {e}")
 
+# Step 3: Run PySpark aggregation
+def aggregate_with_pyspark():
+    spark = SparkSession.builder \
+        .appName("StudentScoreAggregator") \
+        .master("local[*]") \
+        .getOrCreate()
+
+    input_path = f"{HDFS_NAMENODE}/datasets/assessments.csv"
+    output_path = f"{HDFS_NAMENODE}/results/avg_scores"
+
+    print(f"Reading from: {input_path}", flush=True)
+    df = spark.read.csv(input_path, header=True, inferSchema=True)
+    print(f"Loaded DataFrame with {df.count()} rows", flush=True)
+
+    avg_df = df.groupBy("id_student").avg("score")
+    avg_df = avg_df.withColumnRenamed("avg(score)", "average_score")
+
+    print("Writing aggregated results to:", output_path, flush=True)
+    avg_df.write.mode("overwrite").option("header", True).csv(output_path)
+
+    print("Aggregation complete.", flush=True)
+    spark.stop()
+
 
 # DAG definition
 with DAG(
@@ -57,7 +81,7 @@ with DAG(
     default_args=default_args,
     schedule=None,
     catchup=False,
-    description="Download ZIP, extract CSVs, upload to HDFS (Python only)",
+    description="Download ZIP, extract CSVs, upload to HDFS, run PySpark aggregation",
 ) as dag:
 
     download_and_extract = PythonOperator(
@@ -70,5 +94,10 @@ with DAG(
         python_callable=upload_to_hdfs_task
     )
 
-    download_and_extract >> upload_to_hdfs
+    aggregate_task = PythonOperator(
+        task_id="aggregate_with_pyspark",
+        python_callable=aggregate_with_pyspark
+    )
+
+    download_and_extract >> upload_to_hdfs >> aggregate_task
 
