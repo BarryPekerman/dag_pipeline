@@ -16,7 +16,7 @@ def test_mysql_jdbc():
         .config("spark.jars", "/opt/mysql-connector-java.jar") \
         .getOrCreate()
 
-    jdbc_url = "jdbc:mysql://mysql.mysql.svc.cluster.local:3306/airflow_db"
+    jdbc_url = "jdbc:mysql://mysql.mysql.svc.cluster.local:3306/airflow_db?serverTimezone=UTC"
     jdbc_props = {
         "user": "airflow",
         "password": "airflowpassword",
