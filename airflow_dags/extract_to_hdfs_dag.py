@@ -51,24 +51,38 @@ def upload_to_hdfs_task():
             except Exception as e:
                 print(f"Upload failed for {file}: {e}")
 
-# Step 3: Run PySpark aggregation (schema inspection only)
+# Step 3: Run PySpark aggregation and write to PostgreSQL
 def aggregate_with_pyspark():
     spark = SparkSession.builder \
         .appName("StudentScoreAggregator") \
         .master("local[*]") \
+        .config("spark.jars.packages", "org.postgresql:postgresql:42.7.3") \
         .getOrCreate()
 
     input_path = f"{HDFS_NAMENODE}/datasets/assessments.csv"
-
     print(f"Reading from: {input_path}", flush=True)
+
     df = spark.read.csv(input_path, header=True, inferSchema=True)
 
     print("=== DataFrame Schema ===", flush=True)
     df.printSchema()
     df.show(5)
 
+    avg_df = df.groupBy("id_student").avg("score") \
+               .withColumnRenamed("avg(score)", "average_score")
+
+    jdbc_url = "jdbc:postgresql://postgres-postgresql.postgres.svc.cluster.local:5432/airflow_db"
+    jdbc_properties = {
+        "user": "airflow",
+        "password": "airflowpass",
+        "driver": "org.postgresql.Driver"
+    }
+
+    print("Writing aggregated results to PostgreSQL", flush=True)
+    avg_df.write.jdbc(url=jdbc_url, table="student_scores", mode="overwrite", properties=jdbc_properties)
+
+    print("Write complete.", flush=True)
     spark.stop()
-    return
 
 # DAG definition
 with DAG(
@@ -76,7 +90,7 @@ with DAG(
     default_args=default_args,
     schedule=None,
     catchup=False,
-    description="Download ZIP, extract CSVs, upload to HDFS, inspect PySpark schema",
+    description="Download ZIP, extract CSVs, upload to HDFS, write PySpark results to PostgreSQL",
 ) as dag:
 
     download_and_extract = PythonOperator(
