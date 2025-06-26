@@ -1,4 +1,4 @@
-from airflow import DAG
+    dfrom airflow import DAG
 from airflow.providers.standard.operators.python import PythonOperator
 from datetime import datetime, timedelta
 from hdfs import InsecureClient
@@ -51,7 +51,7 @@ def upload_to_hdfs_task():
             except Exception as e:
                 print(f"Upload failed for {file}: {e}")
 
-# Step 3: Run PySpark aggregation
+# Step 3: Run PySpark aggregation (schema inspection only)
 def aggregate_with_pyspark():
     spark = SparkSession.builder \
         .appName("StudentScoreAggregator") \
@@ -59,21 +59,16 @@ def aggregate_with_pyspark():
         .getOrCreate()
 
     input_path = f"{HDFS_NAMENODE}/datasets/assessments.csv"
-    output_path = f"{HDFS_NAMENODE}/results/avg_scores"
 
     print(f"Reading from: {input_path}", flush=True)
     df = spark.read.csv(input_path, header=True, inferSchema=True)
-    print(f"Loaded DataFrame with {df.count()} rows", flush=True)
 
-    avg_df = df.groupBy("id_student").avg("score")
-    avg_df = avg_df.withColumnRenamed("avg(score)", "average_score")
+    print("=== DataFrame Schema ===", flush=True)
+    df.printSchema()
+    df.show(5)
 
-    print("Writing aggregated results to:", output_path, flush=True)
-    avg_df.write.mode("overwrite").option("header", True).csv(output_path)
-
-    print("Aggregation complete.", flush=True)
     spark.stop()
-
+    return
 
 # DAG definition
 with DAG(
@@ -81,7 +76,7 @@ with DAG(
     default_args=default_args,
     schedule=None,
     catchup=False,
-    description="Download ZIP, extract CSVs, upload to HDFS, run PySpark aggregation",
+    description="Download ZIP, extract CSVs, upload to HDFS, inspect PySpark schema",
 ) as dag:
 
     download_and_extract = PythonOperator(
