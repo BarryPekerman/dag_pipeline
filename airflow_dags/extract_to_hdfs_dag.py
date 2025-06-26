@@ -3,6 +3,7 @@ from airflow.providers.standard.operators.python import PythonOperator
 from datetime import datetime, timedelta
 from hdfs import InsecureClient
 from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
 import requests, zipfile, pathlib
 from io import BytesIO
 import os
@@ -54,7 +55,7 @@ def upload_to_hdfs_task():
 # Step 3: Run PySpark aggregation and write to PostgreSQL
 def aggregate_with_pyspark():
     spark = SparkSession.builder \
-        .appName("StudentScoreAggregator") \
+        .appName("StudentWeightAggregator") \
         .master("local[*]") \
         .config("spark.jars.packages", "org.postgresql:postgresql:42.7.3") \
         .getOrCreate()
@@ -68,8 +69,7 @@ def aggregate_with_pyspark():
     df.printSchema()
     df.show(5)
 
-    avg_df = df.groupBy("id_student").avg("score") \
-               .withColumnRenamed("avg(score)", "average_score")
+    avg_df = df.groupBy("code_module").agg(F.avg("weight").alias("average_weight"))
 
     jdbc_url = "jdbc:postgresql://postgres-postgresql.postgres.svc.cluster.local:5432/airflow_db"
     jdbc_properties = {
@@ -79,7 +79,7 @@ def aggregate_with_pyspark():
     }
 
     print("Writing aggregated results to PostgreSQL", flush=True)
-    avg_df.write.jdbc(url=jdbc_url, table="student_scores", mode="overwrite", properties=jdbc_properties)
+    avg_df.write.jdbc(url=jdbc_url, table="module_weights", mode="overwrite", properties=jdbc_properties)
 
     print("Write complete.", flush=True)
     spark.stop()
