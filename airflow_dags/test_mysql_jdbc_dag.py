@@ -13,7 +13,7 @@ def test_mysql_jdbc():
     spark = SparkSession.builder \
         .appName("MySQLJDBCTest") \
         .master("local[*]") \
-        .config("spark.jars.packages", "mysql:mysql-connector-java:8.0.33") \
+        .config("spark.jars", "/opt/mysql-connector-java.jar") \
         .getOrCreate()
 
     jdbc_url = "jdbc:mysql://mysql.mysql.svc.cluster.local:3306/airflow_db"
