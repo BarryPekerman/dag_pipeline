@@ -19,6 +19,7 @@ HDFS_NAMENODE = "hdfs://hadoop-hadoop-hdfs-nn.hadoop.svc.cluster.local:9000"
 HDFS_USER = "airflow"
 EXTRACT_DIR = "/opt/airflow/data/csvs"
 
+# Step 1: Download and extract the dataset
 def download_and_extract_zip():
     url = "https://analyse.kmi.open.ac.uk/open-dataset/download"
     target_dir = EXTRACT_DIR
@@ -34,6 +35,7 @@ def download_and_extract_zip():
         zip_file.extractall(target_dir)
         print(f"Extracted files to: {target_dir}", flush=True)
 
+# Step 2: Upload to HDFS
 def upload_to_hdfs_task():
     client = InsecureClient(HDFS_URL, user=HDFS_USER)
 
@@ -50,45 +52,57 @@ def upload_to_hdfs_task():
             except Exception as e:
                 print(f"Upload failed for {file}: {e}")
 
+# Step 3: Run PySpark aggregation and write to PostgreSQL
 def aggregate_with_pyspark():
     spark = SparkSession.builder \
-        .appName("AvgStudentScores") \
+        .appName("StudentAggregator") \
         .master("local[*]") \
         .config("spark.jars.packages", "org.postgresql:postgresql:42.7.3") \
         .getOrCreate()
 
-    assessments_path = f"{HDFS_NAMENODE}/datasets/assessments.csv"
-    student_assessments_path = f"{HDFS_NAMENODE}/datasets/studentAssessment.csv"
+    print("Reading CSV files from HDFS", flush=True)
 
-    assessments_df = spark.read.csv(assessments_path, header=True, inferSchema=True)
-    student_df_raw = spark.read.csv(student_assessments_path, header=True, inferSchema=True)
+    sa_path = f"{HDFS_NAMENODE}/datasets/studentAssessment.csv"
+    a_path = f"{HDFS_NAMENODE}/datasets/assessments.csv"
+    si_path = f"{HDFS_NAMENODE}/datasets/studentInfo.csv"
 
-    student_df = student_df_raw.filter("score IS NOT NULL AND score != ''") \
-                               .withColumn("score", F.col("score").cast("double")) \
-                               .filter("score >= 0 AND score <= 100")
+    student_assessments = spark.read.csv(sa_path, header=True, inferSchema=True)
+    assessments = spark.read.csv(a_path, header=True, inferSchema=True)
+    student_info = spark.read.csv(si_path, header=True, inferSchema=True)
 
-    joined_df = student_df.join(assessments_df, on="id_assessment", how="inner")
+    print("Joining and cleaning data...", flush=True)
 
-    result_df = joined_df.groupBy("code_module").agg(F.round(F.avg("score"), 2).alias("avg_score"))
+    # Join studentAssessment with assessments to get code_module
+    joined = student_assessments.join(assessments, on="id_assessment", how="inner") \
+                                .join(student_info, on="id_student", how="inner")
+
+    # Filter: score is not null, is_banked = 0, student did not withdraw
+    clean = joined.filter(
+        (F.col("score").isNotNull()) &
+        (F.col("is_banked") == 0) &
+        (F.col("final_result") != "Withdrawn")
+    )
+
+    # Aggregate average score per module
+    avg_scores = clean.groupBy("code_module").agg(F.avg("score").alias("avg_score"))
+
+    print("Result preview:")
+    avg_scores.show()
 
     jdbc_url = "jdbc:postgresql://postgres-postgresql.postgres.svc.cluster.local:5432/airflow_db"
-    jdbc_properties = {
+    jdbc_props = {
         "user": "airflow",
         "password": "airflowpass",
         "driver": "org.postgresql.Driver"
     }
 
-    print("Writing aggregated results to PostgreSQL", flush=True)
-    result_df.write.jdbc(
-        url=jdbc_url,
-        table="avg_scores_by_module",
-        mode="overwrite",
-        properties=jdbc_properties
-    )
+    print("Writing avg_scores_by_module to PostgreSQL...", flush=True)
+    avg_scores.write.jdbc(url=jdbc_url, table="avg_scores_by_module", mode="overwrite", properties=jdbc_props)
 
-    print("Write complete.", flush=True)
+    print("Aggregation complete.", flush=True)
     spark.stop()
 
+# DAG definition
 with DAG(
     "my_pipeline",
     default_args=default_args,
